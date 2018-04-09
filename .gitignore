@@ -1,6 +1,7 @@
 # directory
 tmp
 __pycache__
+.idea
 
 # user data
 *.json
