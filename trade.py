@@ -10,24 +10,25 @@ if __name__ == '__main__':
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s %(levelname)s: %(message)s',
-        datefmt='%m/%d/%Y %I:%M:%S %p')
+        datefmt='%Y-%m-%d %H:%M:%S')
     logfile=logging.handlers.TimedRotatingFileHandler(
         filename = 'log/trade.log',
-        when = 'D'
+        when = 'midnight'
     )
     logfile.setLevel(logging.INFO)
     logfile.setFormatter(logging.Formatter(
         fmt='%(asctime)s %(levelname)s: %(message)s',
-        datefmt='%m/%d/%Y %I:%M:%S %p'))
+        datefmt='%Y-%m-%d %H:%M:%S'))
     logging.getLogger('').addHandler(logfile)
     logging.info('Wait...')
 
     #config.jsonの読み込み
-    f = open('config.json', 'r')
+    f = open('config.json', 'r', encoding="utf-8")
     config = json.load(f)
 
     #channelBreakOut設定値
     channelBreakOut = channel.ChannelBreakOut()
+    channelBreakOut.lot = config["lotSize"]
     channelBreakOut.entryTerm = config["entryTerm"]
     channelBreakOut.closeTerm = config["closeTerm"]
     channelBreakOut.rangePercent = config["rangePercent"]
@@ -38,7 +39,6 @@ if __name__ == '__main__':
     channelBreakOut.waitTh = config["waitTh"]
     channelBreakOut.candleTerm = config["candleTerm"]
     channelBreakOut.fileName = None
-    channelBreakOut.showFigure = False
 
     #実働
     channelBreakOut.loop()

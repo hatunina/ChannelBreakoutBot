@@ -23,7 +23,7 @@ from . import cryptowatch
 class ChannelBreakOut:
     def __init__(self):
         #config.jsonの読み込み
-        f = open('config.json', 'r')
+        f = open('config.json', 'r', encoding="utf-8")
         config = json.load(f)
         self.cryptowatch = cryptowatch.CryptoWatch()
         #pubnubから取得した約定履歴を保存するリスト（基本的に不要．）
@@ -49,7 +49,11 @@ class ChannelBreakOut:
         self.line_notify_token = config["line_notify_token"]
         self.line_notify_api = 'https://notify-api.line.me/api/notify'
         # グラフ表示
-        self.showFigure = True
+        self.showFigure = False
+        # バックテスト結果のグラフをLineで送る
+        self.sendFigure = False
+        # バックテストのトレード詳細をログ出力する
+        self.showTradeDetail = False
         # optimization用のOHLCcsvファイル
         self.fileName = None
 
@@ -287,6 +291,8 @@ class ChannelBreakOut:
         originalLot = lot
         #勝ちトレード後，何回のトレードでロットを落とすか．
         waitTerm = 0
+        # 取引履歴 [time, order, price, profit]
+        trade_log = []
         for i in range(len(judgement)):
             if i > 0:
                 lastPL = pl[-1]
@@ -298,11 +304,13 @@ class ChannelBreakOut:
                     pos += 1
                     buy_entry.append(judgement[i][0])
                     buyEntrySignals.append(df_candleStick.index[i])
+                    trade_log.append([df_candleStick.index[i], 'buy  entry', judgement[i][0]])
                 #ショートエントリー
                 elif judgement[i][1] != 0:
                     pos -= 1
                     sell_entry.append(judgement[i][1])
                     sellEntrySignals.append(df_candleStick.index[i])
+                    trade_log.append([df_candleStick.index[i], 'sell entry', judgement[i][1]])
             #ロングクローズロジック
             elif pos == 1:
                 #ロングクローズ
@@ -315,6 +323,7 @@ class ChannelBreakOut:
                     pl[-1] = pl[-2] + (plRange-self.cost) * lot
                     buyCloseSignals.append(df_candleStick.index[i])
                     plPerTrade.append((plRange-self.cost)*lot)
+                    trade_log.append([df_candleStick.index[i], 'buy  close', judgement[i][2], (plRange-self.cost)*lot])
                     #waitTh円以上の値幅を取った場合，次の10トレードはロットを1/10に落とす．
                     if plRange > waitTh:
                         waitTerm = originalWaitTerm
@@ -335,6 +344,7 @@ class ChannelBreakOut:
                     pl[-1] = pl[-2] + (plRange-self.cost) * lot
                     sellCloseSignals.append(df_candleStick.index[i])
                     plPerTrade.append((plRange-self.cost)*lot)
+                    trade_log.append([df_candleStick.index[i], 'sell close', judgement[i][3], (plRange-self.cost)*lot])
                     #waitTh円以上の値幅を取った場合，次の10トレードはロットを1/10に落とす．
                     if plRange > waitTh:
                         waitTerm = originalWaitTerm
@@ -352,11 +362,13 @@ class ChannelBreakOut:
                     pos += 1
                     buy_entry.append(judgement[i][0])
                     buyEntrySignals.append(df_candleStick.index[i])
+                    trade_log.append([df_candleStick.index[i], 'buy  entry', judgement[i][0]])
                 #ショートエントリー
                 elif judgement[i][1] != 0:
                     pos -= 1
                     sell_entry.append(judgement[i][1])
                     sellEntrySignals.append(df_candleStick.index[i])
+                    trade_log.append([df_candleStick.index[i], 'sell entry', judgement[i][1]])
 
         #最後にポジションを持っていたら，期間最後のローソク足の終値で反対売買．
         if pos == 1:
@@ -367,6 +379,7 @@ class ChannelBreakOut:
             buyCloseSignals.append(df_candleStick.index[-1])
             nOfTrade += 1
             plPerTrade.append(plRange*lot)
+            trade_log.append([df_candleStick.index[-1], 'buy  close', df_candleStick["close"][-1], plRange*lot])
         elif pos ==-1:
             sell_close.append(df_candleStick["close"][-1])
             plRange = sell_entry[-1] - sell_close[-1]
@@ -375,7 +388,8 @@ class ChannelBreakOut:
             sellCloseSignals.append(df_candleStick.index[-1])
             nOfTrade += 1
             plPerTrade.append(plRange*lot)
-        return (pl, buyEntrySignals, sellEntrySignals, buyCloseSignals, sellCloseSignals, nOfTrade, plPerTrade)
+            trade_log.append([df_candleStick.index[-1], 'sell close', df_candleStick["close"][-1], plRange*lot])
+        return (pl, buyEntrySignals, sellEntrySignals, buyCloseSignals, sellCloseSignals, nOfTrade, plPerTrade, trade_log)
 
     def describeResult(self):
         """
@@ -397,7 +411,7 @@ class ChannelBreakOut:
         entryLowLine, entryHighLine = self.calculateLines(df_candleStick, self.entryTerm, self.rangePercent, self.rangePercentTerm)
         closeLowLine, closeHighLine = self.calculateLines(df_candleStick, self.closeTerm, self.rangePercent, self.rangePercentTerm)
         judgement = self.judge(df_candleStick, entryHighLine, entryLowLine, closeHighLine, closeLowLine, self.entryTerm)
-        pl, buyEntrySignals, sellEntrySignals, buyCloseSignals, sellCloseSignals, nOfTrade, plPerTrade = self.backtest(judgement, df_candleStick, 1, self.rangeTh, self.rangeTerm, originalWaitTerm=self.waitTerm, waitTh=self.waitTh, cost=self.cost)
+        pl, buyEntrySignals, sellEntrySignals, buyCloseSignals, sellCloseSignals, nOfTrade, plPerTrade, tradeLog = self.backtest(judgement, df_candleStick, 1, self.rangeTh, self.rangeTerm, originalWaitTerm=self.waitTerm, waitTh=self.waitTh, cost=self.cost)
 
         if self.showFigure:
             import matplotlib.pyplot as plt
@@ -416,32 +430,70 @@ class ChannelBreakOut:
             plt.plot(df_candleStick.index, pl)
             plt.hlines(y=0, xmin=df_candleStick.index[0], xmax=df_candleStick.index[-1], colors='k', linestyles='dashed')
             plt.ylabel("PL(JPY)")
+        elif self.sendFigure:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+            plt.figure()
+            plt.subplot(211)
+            plt.plot(df_candleStick.index, df_candleStick["high"])
+            plt.plot(df_candleStick.index, df_candleStick["low"])
+            plt.ylabel("Price(JPY)")
+            ymin = min(df_candleStick["low"]) - 200
+            ymax = max(df_candleStick["high"]) + 200
+            plt.vlines(buyEntrySignals, ymin , ymax, "blue", linestyles='dashed', linewidth=1)
+            plt.vlines(sellEntrySignals, ymin , ymax, "red", linestyles='dashed', linewidth=1)
+            plt.vlines(buyCloseSignals, ymin , ymax, "black", linestyles='dashed', linewidth=1)
+            plt.vlines(sellCloseSignals, ymin , ymax, "green", linestyles='dashed', linewidth=1)
+            plt.subplot(212)
+            plt.plot(df_candleStick.index, pl)
+            plt.hlines(y=0, xmin=df_candleStick.index[0], xmax=df_candleStick.index[-1], colors='k', linestyles='dashed')
+            plt.ylabel("PL(JPY)")
+            # save as png
+            today = datetime.datetime.now().strftime('%Y%m%d')
+            number = "_" + str(len(pl))
+            fileName = "png/" + today + number + ".png"
+            plt.savefig(fileName)
+            self.lineNotify("Result of backtest",fileName)
         else:
             pass
 
         #各統計量の計算および表示．
         winTrade = sum([1 for i in plPerTrade if i > 0])
         loseTrade = sum([1 for i in plPerTrade if i < 0])
-        winPer = round(winTrade/(winTrade+loseTrade) * 100,2)
+        try:
+            winPer = round(winTrade/(winTrade+loseTrade) * 100,2)
+        except:
+            winPer = 100
 
         winTotal = sum([i for i in plPerTrade if i > 0])
         loseTotal = sum([i for i in plPerTrade if i < 0])
-        profitFactor = round(winTotal/-loseTotal, 3)
+        try:
+            profitFactor = round(winTotal/-loseTotal, 3)
+        except:
+            profitFactor = 10
 
-        maxProfit = max(plPerTrade)
-        maxLoss = min(plPerTrade)
+        maxProfit = max(plPerTrade, default=0)
+        maxLoss = min(plPerTrade, default=0)
 
-        logging.info('showFigure :%s',self.showFigure)
+        logging.info('showFigure :%s, sendFigure :%s',self.showFigure, self.sendFigure)
         logging.info("Total pl: {}JPY".format(int(pl[-1])))
         logging.info("The number of Trades: {}".format(nOfTrade))
         logging.info("The Winning percentage: {}%".format(winPer))
         logging.info("The profitFactor: {}".format(profitFactor))
         logging.info("The maximum Profit and Loss: {}JPY, {}JPY".format(maxProfit, maxLoss))
+        if self.showTradeDetail:
+            logging.info("==Trade detail==")
+            for log in tradeLog:
+                profit = log[3] if len(log) > 3 else ''
+                logging.info("%s %s %s %s", log[0], log[1], log[2], profit)
+            logging.info("============")
+
         if self.showFigure:
             plt.show()
         else:
             pass
-        return pl[-1], profitFactor
+        return pl[-1], profitFactor, maxLoss, winPer
 
     def fromListToDF(self, candleStick):
         """
@@ -526,7 +578,7 @@ class ChannelBreakOut:
             # save as png
             today = datetime.datetime.now().strftime('%Y%m%d')
             number = "_" + str(len(pl))
-            fileName = today + number + ".png"
+            fileName = "png/" + today + number + ".png"
             plt.savefig(fileName)
             plt.close()
         except:
@@ -578,7 +630,7 @@ class ChannelBreakOut:
             logging.info('================================')
             exeMin = datetime.datetime.now().minute
             #1分ごとに基準ラインを更新
-            if exeMin + 1 > exeTimer1 or (exeMin == 0 and exeTimer1 == 60):
+            if exeMin + 1 > exeTimer1 or exeMin + 1 < exeTimer1:
                 exeTimer1 = exeMin + 1
                 logging.info("Renewing candleSticks")
                 try:
@@ -594,8 +646,11 @@ class ChannelBreakOut:
                 else:
                     df_candleStick = self.processCandleStick(candleStick, self.candleTerm)
 
+                #ラインの算出
                 entryLowLine, entryHighLine = self.calculateLines(df_candleStick, self.entryTerm, self.rangePercent, self.rangePercentTerm)
                 closeLowLine, closeHighLine = self.calculateLines(df_candleStick, self.closeTerm, self.rangePercent, self.rangePercentTerm)
+                #現在レンジ相場かどうか．
+                isRange = self.isRange(df_candleStick, self.rangeTerm, self.rangeTh)
             else:
                 pass
 
@@ -604,27 +659,29 @@ class ChannelBreakOut:
             low = min([self.executions[-1-i]["price"] for i in range(30)])
             #売り買い判定
             judgement = self.judgeForLoop(high, low, entryHighLine, entryLowLine, closeHighLine, closeLowLine)
-            #現在レンジ相場かどうか．
-            isRange = self.isRange(df_candleStick, self.rangeTerm, self.rangeTh)
 
             #取引所のヘルスチェック
             boardState = self.order.getboardstate()
             serverHealth = True
-            permitHealth = ["NORMAL", "BUSY", "VERY BUSY"]
-            if (boardState["health"] in permitHealth) and boardState["state"] == "RUNNING" and self.healthCheck:
+            permitHealth1 = ["NORMAL", "BUSY", "VERY BUSY"]
+            permitHealth2 = ["NORMAL", "BUSY", "VERY BUSY", "SUPER BUSY"]
+            if (boardState["health"] in permitHealth1) and boardState["state"] == "RUNNING" and self.healthCheck:
                 pass
-            elif self.healthCheck:
+            elif (boardState["health"] in permitHealth2) and boardState["state"] == "RUNNING" and not self.healthCheck:
+                pass
+            else:
                 serverHealth = False
-                logging.info('Server is %s. Do not order.', boardState["health"],)
+                logging.info('Server is %s/%s. Do not order.', boardState["health"], boardState["state"])
 
             #ログ出力
             logging.info('high:%s low:%s isRange:%s', high, low, isRange[-1])
-            logging.info('entryHighLine:%s entryLowLine:%s closeHighLine:%s closeLowLine:%s', entryHighLine[-1], entryLowLine[-1], closeHighLine[-1], closeLowLine[-1])
+            logging.info('entryHighLine:%s entryLowLine:%s', entryHighLine[-1], entryLowLine[-1])
+            logging.info('closeHighLine:%s closeLowLine:%s', closeHighLine[-1], closeLowLine[-1])
             logging.info('Server Health is:%s State is:%s', boardState["health"], boardState["state"])
             if pos == 1:
-                logging.info("position : Long")
+                logging.info('position : Long(Price:%s)',lastPositionPrice)
             elif pos == -1:
-                logging.info("position : Short")
+                logging.info('position : Short(Price:%s)',lastPositionPrice)
             else:
                 logging.info("position : None")
 
@@ -694,7 +751,7 @@ class ChannelBreakOut:
                     logging.info(message)
 
                     #一定以上の値幅を取った場合，次の10トレードはロットを1/10に落とす．
-                    if plRange > waitTh:
+                    if plRange > self.waitTh:
                         waitTerm = self.waitTerm
                         lot = round(originalLot/10,3)
                     if waitTerm > 0:
@@ -728,8 +785,8 @@ class ChannelBreakOut:
                     logging.info(message)
                     lastPositionPrice = best_bid
 
-            if (exeMin + 1 > exeTimer5 or (exeMin == 0 and exeTimer5 == 60)) and exeMin % 5 == 0:
-                exeTimer5 = exeMin + 5
+            if (exeMin + 1 > exeTimer5 or exeMin + 1 < exeTimer5) and exeMin % 5 == 0:
+                exeTimer5 = exeMin + 1
                 message = "Waiting for channelbreaking."
                 logging.info(message)
 

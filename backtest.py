@@ -10,20 +10,20 @@ if __name__ == '__main__':
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s %(levelname)s: %(message)s',
-        datefmt='%m/%d/%Y %I:%M:%S %p')
+        datefmt='%Y-%m-%d %H:%M:%S')
     logfile=logging.handlers.TimedRotatingFileHandler(
         filename = 'log/backtest.log',
-        when = 'D'
+        when = 'midnight'
     )
     logfile.setLevel(logging.INFO)
     logfile.setFormatter(logging.Formatter(
         fmt='%(asctime)s %(levelname)s: %(message)s',
-        datefmt='%m/%d/%Y %I:%M:%S %p'))
+        datefmt='%Y-%m-%d %H:%M:%S'))
     logging.getLogger('').addHandler(logfile)
     logging.info('Wait...')
 
     #config.jsonの読み込み
-    f = open('config.json', 'r')
+    f = open('config.json', 'r', encoding="utf-8")
     config = json.load(f)
 
     #channelBreakOut設定値
@@ -40,6 +40,8 @@ if __name__ == '__main__':
     channelBreakOut.cost = config["cost"]
     channelBreakOut.fileName = config["fileName"]
     channelBreakOut.showFigure = config["showFigure"]
+    channelBreakOut.sendFigure = config["sendFigure"]
+    channelBreakOut.showTradeDetail = config["showTradeDetail"]
 
     #バックテスト
     channelBreakOut.describeResult()

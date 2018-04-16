@@ -8,8 +8,9 @@ __pycache__
 *.log
 *.csv
 *.log.*
+*.png
 
 # default config
-!/config_default.json
+!*_default.json
 
 !.gitkeep

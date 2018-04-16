@@ -4,6 +4,7 @@
     "secret" : "bitflyer_API_secret",
     "line_notify_token" : "token",
     "healthCheck" : true,
+    "lotSize" : 0.01,
     "entryTerm" : 5,
     "closeTerm" : 5,
     "rangePercent" : 1.6,
@@ -15,5 +16,10 @@
     "candleTerm" : "5T",
     "cost" : 0,
     "fileName" : "chart.csv",
-    "showFigure" : true
+    "showFigure" : true,
+    "sendFigure" : false,
+    "showTradeDetail" : true,
+    "core" : null,
+    "hyperopt" : 1000,
+    "mlMode" : "PL"
 }
